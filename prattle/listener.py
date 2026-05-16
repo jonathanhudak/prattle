@@ -30,6 +30,11 @@ log = logging.getLogger("listener")
 # Set by the TUI to suspend transcript writing without stopping the mic stream.
 _PAUSED: threading.Event = threading.Event()
 
+# Module-level transcriber cache so new sessions reuse the loaded model.
+_transcriber_cache: dict[str, "ParakeetTranscriber"] = {}
+# Lock so concurrent sessions never call the model simultaneously.
+_TRANSCRIPTION_LOCK: threading.Lock = threading.Lock()
+
 
 class ParakeetTranscriber:
     """Thin wrapper around parakeet-mlx so the import is deferred."""
@@ -138,9 +143,12 @@ def run_listener(
     transcript_path = config.transcript_path
     transcript_path.parent.mkdir(parents=True, exist_ok=True)
 
-    transcriber = ParakeetTranscriber(model_id)
+    # Reuse cached model — avoids 5-10s reload on new session.
+    if model_id not in _transcriber_cache:
+        _transcriber_cache[model_id] = ParakeetTranscriber(model_id)
+    transcriber = _transcriber_cache[model_id]
 
-    audio_q: "queue.Queue[np.ndarray]" = queue.Queue()
+    audio_q: "queue.Queue[np.ndarray | None]" = queue.Queue()
     _own_stop = stop_event is None
     if stop_event is None:
         stop_event = threading.Event()
@@ -152,6 +160,33 @@ def run_listener(
     if _own_stop:
         signal.signal(signal.SIGINT, _on_sigint)
         signal.signal(signal.SIGTERM, _on_sigint)
+
+    # Transcription worker — runs in its own thread so the capture loop can
+    # exit immediately when stop_event fires, without waiting for inference.
+    def _transcribe_worker() -> None:
+        while True:
+            chunk = audio_q.get()
+            if chunk is None:  # sentinel — exit
+                break
+            try:
+                with _TRANSCRIPTION_LOCK:
+                    text = transcriber.transcribe_audio(chunk, sample_rate)
+            except Exception as e:
+                log.warning("transcription failed: %s", e)
+                continue
+            if not text:
+                continue
+            if _PAUSED.is_set():
+                log.debug("listener: paused, discarding: %s", text[:40])
+                continue
+            record = {"t": now_iso(), "text": text}
+            append_jsonl(transcript_path, record)
+            log.info("» %s", text)
+
+    transcription_thread = threading.Thread(
+        target=_transcribe_worker, name="transcriber", daemon=True
+    )
+    transcription_thread.start()
 
     callback, _ = _make_callback(audio_q, sample_rate, chunk_samples)
 
@@ -171,24 +206,14 @@ def run_listener(
         device=input_device,
         callback=callback,
     ):
+        # Poll stop_event only — transcription worker drains audio_q independently.
+        # Exits within 0.25s so new sessions can open the mic immediately.
         while not stop_event.is_set():  # type: ignore[union-attr]
-            try:
-                chunk = audio_q.get(timeout=0.25)
-            except queue.Empty:
-                continue
-            try:
-                text = transcriber.transcribe_audio(chunk, sample_rate)
-            except Exception as e:
-                log.warning("transcription failed: %s", e)
-                continue
-            if not text:
-                continue
-            if _PAUSED.is_set():
-                log.debug("listener: paused, discarding: %s", text[:40])
-                continue
-            record = {"t": now_iso(), "text": text}
-            append_jsonl(transcript_path, record)
-            log.info("» %s", text)
+            stop_event.wait(timeout=0.25)  # type: ignore[union-attr]
+
+    # InputStream is now closed. Signal transcription worker to finish draining
+    # and exit; it's a daemon thread so we don't need to join.
+    audio_q.put(None)
 
     return 0
 

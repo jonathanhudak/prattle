@@ -376,12 +376,17 @@ def build_app_class(cfg: Config):
             self._router_thread.start()
 
         def _stop_workers(self, timeout: float = 3.0) -> None:
-            """Signal workers to stop and wait briefly."""
+            """Signal workers to stop and wait briefly.
+
+            The listener capture loop now exits within 0.25s (decoupled from
+            transcription), so the join should reliably succeed.
+            """
             self._stop_event.set()
             if self._router_thread and self._router_thread.is_alive():
                 self._router_thread.join(timeout=timeout)
+            # Listener exits fast now — 1s is plenty.
             if self._listener_thread and self._listener_thread.is_alive():
-                self._listener_thread.join(timeout=timeout)
+                self._listener_thread.join(timeout=1.0)
 
         # ---- updates ----
 
