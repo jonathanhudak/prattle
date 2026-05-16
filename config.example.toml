@@ -1,0 +1,60 @@
+# prattle configuration. Copy to config.toml and edit.
+
+[obsidian]
+# Absolute path to your Obsidian vault (or any folder you want outputs in).
+vault_path = "/Users/jonathan/Documents/Obsidian"
+# Subfolder name for this conversation's outputs. Will be created if missing.
+# Tip: include a date so sessions don't collide.
+session_name = "prattle-sessions/2026-05-16-thinking-aloud"
+
+[listener]
+# Chunk size in seconds. Larger = more context per ASR call, more latency.
+chunk_seconds = 6.0
+# Input device index (integer). Omit or comment out for system default.
+# Run `python -m prattle devices` to list devices.
+# input_device = 0
+# 16kHz mono is what Parakeet expects.
+sample_rate = 16000
+# HuggingFace model id to use. mlx-community has int8 quantized variants.
+parakeet_model = "mlx-community/parakeet-tdt-0.6b-v3"
+
+[router]
+# Which backend powers the LLM calls: "claude_code", "agent_sdk", or "hermes".
+# Default uses the Claude Code CLI — works today, no extra deps.
+backend = "claude_code"
+# Minimum seconds between router invocations.
+debounce_seconds = 12
+# Minimum new transcript characters before invoking the router.
+min_new_chars = 60
+# How many characters of context to feed the router (recent transcript window).
+context_chars = 4000
+
+[backends.claude_code]
+# Path to the claude CLI. "claude" if on PATH.
+binary = "claude"
+# Optional extra args, e.g. ["--model", "sonnet"].
+extra_args = []
+# Timeout per call.
+timeout_seconds = 60
+
+[backends.agent_sdk]
+# Stub — see prattle/backends/agent_sdk.py. Switch to this when you want
+# real subagent/streaming/tool-use semantics via the Claude Agent SDK.
+model = "claude-sonnet-4-5"
+api_key_env = "ANTHROPIC_API_KEY"
+
+[backends.hermes]
+# Stub — edit prattle/backends/hermes.py to wire this up.
+# Anything you put here is passed through to your Hermes implementation.
+endpoint = ""
+
+[agents.obsidian]
+enabled = true
+
+[agents.mermaid]
+enabled = true
+
+[agents.html]
+enabled = true
+# HTML synthesis is the expensive one. Gate it.
+cooldown_seconds = 60

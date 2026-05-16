@@ -1,0 +1,18 @@
+# Core
+tomli>=2.0 ; python_version < "3.11"
+
+# ASR — Apple Silicon. Skip on non-Mac if you only use `replay` mode.
+parakeet-mlx>=0.2.0 ; sys_platform == "darwin" and platform_machine == "arm64"
+
+# Audio capture
+sounddevice>=0.4.6 ; sys_platform == "darwin"
+numpy>=1.26
+
+# Markdown → HTML (used by HTML agent's local rendering fallback)
+markdown>=3.5
+
+# TUI
+textual>=0.60
+
+# Agent SDK backend (optional; required only if you switch router.backend = "agent_sdk")
+# claude-agent-sdk>=0.1.0

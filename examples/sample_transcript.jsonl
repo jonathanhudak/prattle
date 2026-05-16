@@ -1,0 +1,8 @@
+{"t": "2026-05-16T18:00:00.000Z", "text": "Okay so I'm thinking about how to design a continuous listening system that can route to specialized sub-agents."}
+{"t": "2026-05-16T18:00:08.000Z", "text": "The router agent watches the incoming transcript and decides which specialists to invoke for each chunk."}
+{"t": "2026-05-16T18:00:18.000Z", "text": "There are three specialists in the initial version. An Obsidian capture agent that maintains a markdown document, a mermaid sketch artist that draws and updates diagrams, and an HTML synthesizer that periodically rolls everything into a polished page."}
+{"t": "2026-05-16T18:00:32.000Z", "text": "The flow is: microphone goes to the listener which uses Parakeet to transcribe, which writes to a JSONL file, which the router tails. The router calls the backend with a decision prompt, gets back JSON, and dispatches to the agents."}
+{"t": "2026-05-16T18:00:48.000Z", "text": "Each agent is itself an LLM call. The router doesn't generate content; it only decides who acts. This keeps the prompts focused."}
+{"t": "2026-05-16T18:01:02.000Z", "text": "Key design decisions: append-only JSONL transcript so it's tail-able and replayable. Pluggable backend so Claude Code today, Hermes tomorrow. Stable mermaid diagram IDs so the artist iterates on the same diagram."}
+{"t": "2026-05-16T18:01:18.000Z", "text": "Open question: do we need diarization for multi-speaker conversations? For v1 no, but for a meeting recap mode yes."}
+{"t": "2026-05-16T18:01:30.000Z", "text": "Another open question is whether to use VAD or fixed-window chunks. Fixed window is simpler. VAD gives cleaner utterance boundaries but adds a dependency."}
